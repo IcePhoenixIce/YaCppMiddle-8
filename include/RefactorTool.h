@@ -22,17 +22,21 @@ private:
     // 1. Невиртуальные деструкторы
     void handle_nv_dtor(const clang::CXXDestructorDecl *Dtor,
                               clang::DiagnosticsEngine &Diag,
-                              clang::SourceManager &SM);
+                              clang::SourceManager &SM,
+                              const clang::LangOptions &LangOpts,
+                              clang::ASTContext &Context);
 
     // 2. Методы без override
     void handle_miss_override(const clang::CXXMethodDecl *Method,
                                     clang::DiagnosticsEngine &Diag,
-                                    clang::SourceManager &SM);
+                                    clang::SourceManager &SM,
+                                    const clang::LangOptions &LangOpts);
 
     // 3. range-for без &
     void handle_crange_for(const    clang::VarDecl *LoopVar,
                                     clang::DiagnosticsEngine &Diag,
-                                    clang::SourceManager &SM);
+                                    clang::SourceManager &SM,
+                                    const clang::LangOptions &LangOpts);
 private:
     clang::Rewriter &Rewrite;
     std::unordered_set<unsigned> virtualDtorLocations; // Для хранения позиций деструкторов, к которым уже добавлен virtual
