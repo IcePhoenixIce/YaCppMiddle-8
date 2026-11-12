@@ -19,8 +19,11 @@ static void writeFile(const fs::path &path, const std::string &content) {
     file << content;
 }
 
+// Путь к бинарнику утилиты задаётся в CMake
+static const char *kRefactorToolBinary = REFACTOR_TOOL_BINARY;
+
 static int runRefactorTool(const fs::path &filePath) {
-    std::string cmd = "/workspaces/YaCppMiddle-8/build/refactor_tool " + filePath.string() + " -- > /dev/null 2>&1";
+    std::string cmd = std::string(kRefactorToolBinary) + " " + filePath.string() + " -- > /dev/null 2>&1";
     return std::system(cmd.c_str());
 }
 
@@ -28,12 +31,12 @@ class RefactorToolTest : public ::testing::Test {
 protected:
     fs::path tmpDir = fs::temp_directory_path() / "refactor_tool_tests";
 
-    void SetUp() override {
-        fs::create_directories(tmpDir);
-    }
+    void SetUp() override { fs::create_directories(tmpDir); }
 
     void TearDown() override {
-        fs::remove_all(tmpDir);
+        if (!HasFailure()) {
+            fs::remove_all(tmpDir);
+        }
     }
 };
 

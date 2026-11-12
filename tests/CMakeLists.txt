@@ -36,6 +36,10 @@ add_executable(${PROJECT_NAME}_tests "${TEST_SRC_FILES}")
 target_link_libraries(${PROJECT_NAME}_tests PRIVATE gtest_main)
 target_include_directories(${PROJECT_NAME}_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+set(REFACTOR_TOOL_BINARY "${CMAKE_BINARY_DIR}/refactor_tool" CACHE FILEPATH
+    "Path to refactor_tool binary used by unit tests")
+target_compile_definitions(${PROJECT_NAME}_tests PRIVATE REFACTOR_TOOL_BINARY="${REFACTOR_TOOL_BINARY}")
+
 
 include(GoogleTest)
 gtest_discover_tests(refactor_tool_tests)

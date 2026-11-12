@@ -19,35 +19,6 @@ using namespace clang::tooling;
 
 static llvm::cl::OptionCategory ToolCategory("refactor-tool options");
 
-// Рекурсивно проверяем, есть ли у данного класса наследники в текущей единице трансляции.
-// Обходим все объявления в AST, ищем классы, у которых в списке базовых классов
-// присутствует RD (сравниваем по canonical declaration).
-static bool hasDerivedClasses(const CXXRecordDecl *RD, ASTContext &Context) {
-    const TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-    std::function<bool(const DeclContext *)> check = [&](const DeclContext *DC) -> bool {
-        for (const Decl *D : DC->decls()) {
-            if (const CXXRecordDecl *Derived = dyn_cast<CXXRecordDecl>(D)) {
-                if (Derived->hasDefinition() && Derived != RD) {
-                    for (const CXXBaseSpecifier &Base : Derived->bases()) {
-                        const CXXRecordDecl *BaseDecl = Base.getType()->getAsCXXRecordDecl();
-                        if (BaseDecl && BaseDecl->getCanonicalDecl() == RD->getCanonicalDecl()) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            if (const DeclContext *NestedDC = dyn_cast<DeclContext>(D)) {
-                if (NestedDC != DC && !isa<FunctionDecl>(D)) {
-                    if (check(NestedDC))
-                        return true;
-                }
-            }
-        }
-        return false;
-    };
-    return check(TU);
-}
-
 // Метод run вызывается для каждого совпадения с матчем.
 // Мы проверяем тип совпадения по bind-именам и применяем рефакторинг.
 void RefactorHandler::run(const MatchFinder::MatchResult &Result) {
@@ -56,7 +27,7 @@ void RefactorHandler::run(const MatchFinder::MatchResult &Result) {
     auto &LangOpts = Result.Context->getLangOpts();
 
     if (const auto *Dtor = Result.Nodes.getNodeAs<CXXDestructorDecl>("nonVirtualDtor")) {
-        handle_nv_dtor(Dtor, Diag, SM, LangOpts, *Result.Context);
+        handle_nv_dtor(Dtor, Diag, SM, LangOpts);
     }
 
     if (const auto *Method = Result.Nodes.getNodeAs<CXXMethodDecl>("missingOverride")) {
@@ -70,13 +41,9 @@ void RefactorHandler::run(const MatchFinder::MatchResult &Result) {
 
 // todo: необходимо реализовать обработку случая невиртуального деструктора
 void RefactorHandler::handle_nv_dtor(const CXXDestructorDecl *Dtor, DiagnosticsEngine &Diag, SourceManager &SM,
-                                     const LangOptions &LangOpts, ASTContext &Context) {
+                                     const LangOptions &LangOpts) {
     // Реализуйте Ваш код ниже
     if (!Dtor || Dtor->isImplicit() || !SM.isInMainFile(Dtor->getLocation()))
-        return;
-
-    const CXXRecordDecl *RD = Dtor->getParent();
-    if (!RD || !hasDerivedClasses(RD, Context))
         return;
 
     SourceLocation Loc = Dtor->getLocation();
@@ -131,6 +98,11 @@ void RefactorHandler::handle_crange_for(const VarDecl *LoopVar, DiagnosticsEngin
     if (!LoopVar || !SM.isInMainFile(LoopVar->getLocation()))
         return;
 
+    // проверяем на фундаментальность типа
+    const Type *varType = LoopVar->getType().getTypePtr();
+    if (varType && varType->isFundamentalType())
+        return;
+
     TypeLoc TL = LoopVar->getTypeSourceInfo()->getTypeLoc();
     SourceLocation TypeEnd = TL.getEndLoc();
     SourceLocation AfterType = Lexer::getLocForEndOfToken(TypeEnd, 0, SM, LangOpts);
@@ -150,16 +122,15 @@ void RefactorHandler::handle_crange_for(const VarDecl *LoopVar, DiagnosticsEngin
     }
 */
 auto NvDtorMatcher() {
-    // todo: замените код ниже, на свою реализацию, необходимо реализовать матчеры для поиска невиртуальных
-    // деструкторов
-    return cxxDestructorDecl(unless(isVirtual()), unless(isImplicit())).bind("nonVirtualDtor");
+    // todo: замените код ниже, на свою реализацию, необходимо реализовать матчеры для поиска невиртуальных деструкторов
+    return cxxRecordDecl(isDerivedFrom(
+        cxxRecordDecl(has(cxxDestructorDecl(unless(isVirtual()), unless(isImplicit())).bind("nonVirtualDtor")))));
 }
 
 auto NoOverrideMatcher() {
     // todo: замените код ниже, на свою реализацию, необходимо реализовать матчеры для поиска методов без override
-    return cxxMethodDecl(
-        isOverride(),
-        unless(cxxDestructorDecl())).bind("missingOverride");
+    return cxxMethodDecl(isOverride(), unless(cxxDestructorDecl()), unless(hasAttr(attr::Kind::Override)))
+        .bind("missingOverride");
 }
 
 auto NoRefConstVarInRangeLoopMatcher() {
